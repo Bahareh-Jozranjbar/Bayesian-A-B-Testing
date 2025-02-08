@@ -1,0 +1,141 @@
+---
+title: "Bayesian A/B Testing for UX Research"
+output: html_document
+---
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Set seed for reproducibility
+set.seed(42)
+
+# Define total sample size
+n_users <- 500
+update_interval <- 50  # Check probability updates every 50 users
+
+# True success probabilities for UI A and UI B (completion rates)
+p_A <- 0.55  # UI A is expected to be better
+p_B <- 0.45  # UI B is slightly worse
+
+# Generate synthetic data: 1 (success), 0 (failure)
+completion_A <- rbinom(n_users, 1, p_A)
+completion_B <- rbinom(n_users, 1, p_B)
+
+# Prior parameters (Beta distribution)
+alpha_prior <- 1
+beta_prior <- 1
+
+# Compute final posterior parameters (for the density plot)
+alpha_A <- alpha_prior + sum(completion_A)
+beta_A <- beta_prior + (n_users - sum(completion_A))
+
+alpha_B <- alpha_prior + sum(completion_B)
+beta_B <- beta_prior + (n_users - sum(completion_B))
+
+# Generate posterior samples from Beta distributions
+posterior_A <- rbeta(10000, alpha_A, beta_A)
+posterior_B <- rbeta(10000, alpha_B, beta_B)
+
+# Compute final probability that UI A is better than UI B
+prob_A_better <- mean(posterior_A > posterior_B)
+
+# Create data frame for density plot
+posterior_data <- data.frame(
+  value = c(posterior_A, posterior_B),
+  UI = rep(c("UI A", "UI B"), each = 10000)
+)
+
+# Create probability density plot 
+density_plot <- ggplot(posterior_data, aes(x = value, fill = UI)) +
+  geom_density(alpha = 0.6) +
+  geom_vline(xintercept = p_A, color = "blue", linetype = "dashed", size = 1.5, alpha = 0.8) +
+  geom_vline(xintercept = p_B, color = "red", linetype = "dashed", size = 1.5, alpha = 0.8) +
+  labs(
+    title = paste0("Bayesian A/B Testing: Probability UI A is Better = ", round(prob_A_better * 100, 2), "%"),
+    x = "Estimated Completion Rate",
+    y = "Density"
+  ) +
+  theme_minimal(base_size = 18) +  # Increase text size
+  scale_fill_manual(values = c("#1f77b4", "#ff7f0e")) +  # UI A (blue), UI B (orange)
+  theme(
+    plot.title = element_text(face = "bold", size = 22),
+    axis.title.x = element_text(face = "bold", size = 20),
+    axis.title.y = element_text(face = "bold", size = 20),
+    axis.text = element_text(size = 18),
+    legend.text = element_text(size = 18),
+    legend.title = element_text(size = 18)
+  )
+
+# Display and save density plot
+print(density_plot)
+ggsave("bayesian_ab_test_plot.png", density_plot, width = 10, height = 7, dpi = 300)
+cat("Plot saved as 'bayesian_ab_test_plot.png'\n")
+
+
+### REAL-TIME PROBABILITY UPDATE PLOT ###
+
+# Lists to store real-time probability updates
+user_counts <- seq(update_interval, n_users, by = update_interval)
+prob_A_better_list <- numeric(length(user_counts))
+
+# Loop through user data in chunks (every 50 users)
+for (i in seq_along(user_counts)) {
+  
+  # Get the current number of users
+  current_users <- user_counts[i]
+  
+  # Compute posterior parameters using observed data so far
+  alpha_A <- alpha_prior + sum(completion_A[1:current_users])
+  beta_A <- beta_prior + (current_users - sum(completion_A[1:current_users]))
+  
+  alpha_B <- alpha_prior + sum(completion_B[1:current_users])
+  beta_B <- beta_prior + (current_users - sum(completion_B[1:current_users]))
+  
+  # Generate posterior samples
+  posterior_A <- rbeta(10000, alpha_A, beta_A)
+  posterior_B <- rbeta(10000, alpha_B, beta_B)
+  
+  # Compute probability that UI A is better than UI B
+  prob_A_better <- mean(posterior_A > posterior_B)
+  prob_A_better_list[i] <- prob_A_better  # Store for visualization
+
+  # Print real-time probability estimate
+  cat(sprintf("After %d users: Probability UI A is better = %.2f%%\n", 
+              current_users, prob_A_better * 100))
+}
+
+# Create a data frame for real-time visualization
+real_time_data <- data.frame(
+  Users = user_counts,
+  Probability_A_Better = prob_A_better_list * 100  # Convert to percentage
+)
+
+# Create real-time probability update plot with larger text
+real_time_plot <- ggplot(real_time_data, aes(x = Users, y = Probability_A_Better)) +
+  geom_line(color = "blue", size = 1.5) +
+  geom_point(color = "red", size = 4) +
+  labs(
+    title = "Bayesian A/B Testing: Real-Time Probability Updates",
+    x = "Number of Users Tested",
+    y = "Probability UI A is Better (%)"
+  ) +
+  theme_minimal(base_size = 18) +  # Increase text size
+  theme(
+    plot.title = element_text(face = "bold", size = 22),
+    axis.title.x = element_text(face = "bold", size = 20),
+    axis.title.y = element_text(face = "bold", size = 20),
+    axis.text = element_text(size = 18),
+    legend.text = element_text(size = 18),
+    legend.title = element_text(size = 18)
+  )
+
+# Display and save real-time probability update plot
+print(real_time_plot)
+ggsave("bayesian_ab_test_real_time.png", real_time_plot, width = 10, height = 7, dpi = 300)
+cat("Plot saved as 'bayesian_ab_test_real_time.png'\n")
+
+
+
+```
+
